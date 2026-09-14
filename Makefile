@@ -1,8 +1,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sdutlogin
-PKG_VERSION=1.0
-PKG_RELEASE:=3
+PKG_VERSION:=2.0
+PKG_RELEASE:=1
 
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)
 
@@ -12,13 +12,15 @@ define Package/luci-app-sdutlogin
 	SECTION:=luci
 	CATEGORY:=LuCI
 	SUBMENU:=3. Applications
-	TITLE:=sdut Login for LuCI
+	TITLE:=SDUT Campus Network Login for LuCI
 	PKGARCH:=all
-	DEPENDS:=+curl
+	DEPENDS:=+openssl-util
 endef
 
 define Package/luci-app-sdutlogin/description
-	sdut Login for LuCI.
+	Shandong University of Technology (SDUT) campus network auto login.
+	Uses AES encrypted portal protocol (same as web login).
+	Online detection via external generate_204 endpoints.
 endef
 
 define Build/Prepare
@@ -37,11 +39,12 @@ define Package/luci-app-sdutlogin/install
 	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/controller
 	$(INSTALL_DIR) $(1)/etc/hotplug.d/iface
 	$(INSTALL_DIR) $(1)/usr/lib/sdutlogin
-	
+
 	$(INSTALL_CONF) ./files/root/etc/config/sdutlogin $(1)/etc/config/sdutlogin
 	$(INSTALL_BIN) ./files/root/etc/init.d/sdutlogin $(1)/etc/init.d/sdutlogin
 	$(INSTALL_BIN) ./files/root/etc/hotplug.d/iface/100-sdutlogin $(1)/etc/hotplug.d/iface/100-sdutlogin
 	$(INSTALL_BIN) ./login.sh $(1)/usr/lib/sdutlogin/login.sh
+	$(INSTALL_DATA) ./aes.lua $(1)/usr/lib/sdutlogin/aes.lua
 
 	$(INSTALL_DATA) ./files/root/usr/lib/lua/luci/controller/sdutlogin.lua $(1)/usr/lib/lua/luci/controller/sdutlogin.lua
 	$(INSTALL_DATA) ./files/root/usr/lib/lua/luci/model/cbi/sdutlogin.lua $(1)/usr/lib/lua/luci/model/cbi/sdutlogin.lua

@@ -3,4 +3,4 @@ config login
 	option username ''
 	option password ''
 	option interval '5'
-	option auto_offline '0'
+

@@ -1,119 +1,87 @@
 # luci-app-sdutlogin
 
-适用于 山东理工大学dr.com Web 网络认证系统
+山东理工大学（SDUT）校园网 Dr.COM 自动认证 OpenWrt LuCI 插件。
 
-• 自动连接网络  
-• 通过设定的时间检测网络连接状态并自动重连  
-• 双账号备用  
+## 特性
 
-由luci-app-suselogin修改而来
+- **加密 portal 协议**：AES-128-ECB 加密登录，与网页登录完全一致（非明文直连）
+- **在线检测走外部网站**：访问 generate_204 端点判断在线/离线，不碰认证服务器，避免高频访问暴露自动化特征
+- **多端点 fallback**：小米 → 华为 → vivo，增强稳定性
+- **退避机制**：连续登录失败 5 次后自动退避为每 30 分钟一次，不会无限重试
+- **加密自动探测**：openssl → lua（aes.lua），双保障
+- **WAN 口热插拔**：WAN 口 ifup 时自动触发登录检查
 
+## 与原版的区别
 
-## 快速开始
+| 项 | 原版（BlackYau） | 本版 |
+|---|---|---|
+| 登录方式 | 明文直连，账号密码裸拼 URL | AES-128-ECB 加密 portal，与网页一致 |
+| 在线检测 | curl google.cn/generate_204 | wget 小米/华为/vivo generate_204（多 fallback） |
+| 依赖 | curl | openssl-util（或 lua5.1 + aes.lua） |
+| 风控 | 在线时也访问认证服务器 | 在线时不碰认证服务器，只访问外部网站 |
+| 退避 | 无 | 连续失败 5 次退避 30 分钟 |
 
-前往 Releases 下载已编译好的 ipk 
+## 安装
 
-在 OpenWrt - 系统 - 文件传输 选择该 ipk 点击上传，然后在下方安装。
+### 从 Release 下载
 
-![filetransfer](./filetransfer.jpg)
+前往 [Releases](../../releases) 下载对应格式：
 
-安装完毕后在 网络 - SDUT Login 点击**启用**并填入**用户名**和**密码**后点击右下方的**保存&应用**，查看日志当提示**登录成功**时说明已登录成功。
+- **ipk**：OpenWrt 23.05 及更早版本（opkg 包管理）
+- **apk**：OpenWrt 24.10+（ImmortalWrt 24.10 等，apk 包管理）
 
-如果提示缺少依赖，那么还需要安装 `curl`，请使用 Xshell 之类的软件连接到路由器，然后执行以下命令安装 `curl` 。
+在 LuCI → 系统 → 文件传输 上传安装，或 SSH 执行：
 
-```shell
-opkg update
-opkg install curl
+```sh
+# ipk 系统
+opkg update && opkg install luci-app-sdutlogin_*.ipk
+
+# apk 系统
+apk add luci-app-sdutlogin-*.apk
 ```
 
-## 单独编译IPK
+### 使用
 
-先准备好环境 Ubuntu 18 LTS x64 ，安装编译环境的依赖
+安装后在 LuCI → 网络 → SDUT Login：
+1. 填入用户名（手机号）和密码
+2. 点击启用
+3. 保存并应用
 
-```shell
-sudo apt-get update
-sudo apt-get -y install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 python2.7 unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler g++-multilib antlr3 gperf wget curl swig rsync
+日志：LuCI → 网络 → SDUT Login → 日志，或 `/tmp/log/sdutlogin/sdutlogin.log`。
+
+## 加密原理
+
+认证服务器 `http://111.17.200.130/` 的前端 JS 使用 AES-128-ECB 加密登录参数：
+
+```
+AES-128-ECB，PKCS7 填充，密钥 "5c1d5ad4dea0e8dd"
+明文 = JSON.stringify(登录参数)
+输出 = base64(密文)，URL 编码后作为 params 参数
 ```
 
-下载 `lede`/`OpenWrt` 和 `luci-app-suselogin` 源码并进入编译配置菜单
+登录流程：
+1. `loadConfig` 签发 `rcn`（8 位随机码）
+2. 加密登录参数，发送 `/eportal/portal/login?params=<密文>`
+3. 响应 `{"result":1}` = 成功
 
-```shell
-git clone https://github.com/coolsnowwolf/lede
-cd lede
-./scripts/feeds update -a
-./scripts/feeds install -a
-git clone https://github.com/ZhaoKuanhong/luci-app-sdutlogin.git package/luci-app-sdutlogin
-make menuconfig
-```
+注销字段固定 `user_account=drcom, user_password=123`，真正起作用的是来源 IP。
 
-在 make menuconfig 里面选好自己的机型，然后将 LuCI ---> Applications ---> luci-app-sdutlogin
+## 依赖
 
-选中，并将前面的复选框变为 `<M>` 再保存编译配置
+- `openssl-util`（推荐，大多数固件自带）
+- 无 openssl 时可装 `lua5.1`（约 100KB），脚本自带 `aes.lua` 作为加密回退
 
-接下来开始单独编译该插件的 IPK
+## 从源码编译
 
-```shell
+```sh
+# 在 OpenWrt 源码树中
+cd package
+git clone https://github.com/sggc/luci-app-sdutlogin.git
+cd ..
+make menuconfig  # LuCI -> Applications -> luci-app-sdutlogin 选 <M> 或 <*>
 make package/luci-app-sdutlogin/compile -j1 V=s
 ```
 
-编译后的 ipk 在 `bin/packages/` 目录内，同时也会有 `curl` 之类的依赖，如果你的固件已经装好了依赖就只需要拷贝安装 `luci-app-sdutlogin_X.X-X_all.ipk` 即可。
-
-## 固件集成插件
-
-请查看 https://github.com/coolsnowwolf/lede 你必须要先知道如何编译正常的固件，才会在编译的过程中加入该扩展。
-
-```shell
-cd lede/package  # 进入 OpenWrt 源码的 package 目录
-git clone https://github.com/blackyau/luci-app-sdutlogin.git  # 下载插件源码
-cd ..  # 返回 OpenWrt 源码主目录
-make menuconfig  # 进入编译设置菜单
-```
-
-LuCI ---> Applications ---> luci-app-sdutlogin
-
-将其选中，使得复选框变为 `<*>` 再保存编译设置，随后正常编译即可。固件会自带 `luci-app-sdutlogin`
-
-```shell
-make -j8 download
-make -j$(($(nproc) + 1)) V=s
-```
-
-## 实现细节
-
-当插件设置为启用后，每隔指定的间隔时间，会检测登录状态，如果未连接到互联网则会尝试登录，~~同时还会检测当前在线设备数量并保存，如果这次检测的在线数量比上一次的多，就会自动下线并重新登录。~~
-
-发送登录请求返回数据: `/tmp/log/sdutlogin/login.log`
-
-完整日志: `/tmp/log/suselogin/sdutlogin.log`
-
-
-## TODO
-
-- [X] 函数式编程
-- [X] curl指定超时
-- [X] 登出实现
-- [ ] 主脚本配置使用参数传入
-
-## 参考
-
-- [GitHub@coolsnowwolf - Lean’s OpenWrt source](https://github.com/coolsnowwolf/lede)
-- [博客园@大魔王mAysWINd - 开发OpenWrt路由器上LuCI的模块](https://www.cnblogs.com/mayswind/p/3468124.html)
-- [Github@OpenWrt - luci WIKI](https://github.com/openwrt/luci/wiki/CBI)
-- [目录@陈浩南 - 在厦大宿舍安装路由器](https://catalog.chn.moe/%E6%95%99%E7%A8%8B/OpenWrt/%E5%9C%A8%E5%8E%A6%E5%A4%A7%E5%AE%BF%E8%88%8D%E5%AE%89%E8%A3%85%E8%B7%AF%E7%94%B1%E5%99%A8/)
-- [OpenWrt@Documentation - System configuration /etc/config/system](https://openwrt.org/docs/guide-user/base-system/system_configuration)
-- [OpenWrt@Documentation - Init Scripts](https://openwrt.org/docs/techref/initscripts)
-- [OpenWrt@Documentation - NTP client / NTP server](https://openwrt.org/docs/guide-user/services/ntp/client-server)
-- [askubuntu@Greg Hanis - How to remove or delete single cron job using linux command?](https://askubuntu.com/questions/408611)
-- [stackoverflow@dchakarov - Create timestamp variable in bash script](https://stackoverflow.com/questions/17066250)
-- [stackoverflow@Joe Casadonte - How do I create a crontab through a script](https://stackoverflow.com/questions/4880290)
-- [stackoverflow@user0000001 - Search for a cronjob with crontab -l](https://stackoverflow.com/questions/14450866)
-- [知乎@Maxwell - 如何优雅地创建重定向路径中不存在的父目录](https://zhuanlan.zhihu.com/p/61890472)
-- [博客园@程默 - linux shell 时间运算以及时间差计算方法](https://www.cnblogs.com/chengmo/archive/2010/07/13/1776473.html)
-- [橙子_MAX的个人博客 - 【教程笔记】用OpenWRT单独编译ipk插件](https://www.maxlicheng.com/openwrt/42.html)
-- [Xavier Wang - 校园网禁止多终端共享上网解决方案](https://www.xavier.wang/post/45-suck-shit-lan/)
-
 ## License
-Copyright 2023 Faspand <ShiinaMashiro@live.jp>
-Copyright 2020 BlackYau <blackyau426@gmail.com>
 
-GNU General Public License v3.0
+GPL-3.0
