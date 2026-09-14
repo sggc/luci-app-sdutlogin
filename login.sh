@@ -159,10 +159,14 @@ do_login() {
     return 1
 }
 
-# 退避机制
+# 退避机制（从 uci 读，可自定义）
 BACKOFF_FILE="/tmp/.sdut_backoff"
-BACKOFF_MAX=5
-BACKOFF_SECS=1800
+backoff_max=$(uci -q get sdutlogin.@login[0].backoff_max 2>/dev/null)
+[ -z "$backoff_max" ] && backoff_max=5
+backoff_secs=$(uci -q get sdutlogin.@login[0].backoff_secs 2>/dev/null)
+[ -z "$backoff_secs" ] && backoff_secs=1800
+backoff_stop=$(uci -q get sdutlogin.@login[0].backoff_stop 2>/dev/null)
+[ -z "$backoff_stop" ] && backoff_stop=0
 
 do_check() {
     if is_online; then
@@ -177,8 +181,14 @@ do_check() {
             local now cnt ts
             now=$(date +%s); cnt=0; ts=0
             [ -f "$BACKOFF_FILE" ] && read cnt ts < "$BACKOFF_FILE" 2>/dev/null
-            if [ "${cnt:-0}" -ge "$BACKOFF_MAX" ] && [ $((now - ts)) -lt "$BACKOFF_SECS" ]; then
-                log "已连续失败 ${cnt} 次，退避中（每 30 分钟重试一次）"
+            # 永不重试检查
+            if [ "$backoff_stop" -gt 0 ] && [ "${cnt:-0}" -ge "$backoff_stop" ]; then
+                log "已连续失败 ${cnt} 次，达到上限 $backoff_stop，停止重试（需手动重新启用）"
+                return 1
+            fi
+            # 退避检查
+            if [ "$backoff_max" -gt 0 ] && [ "${cnt:-0}" -ge "$backoff_max" ] && [ $((now - ts)) -lt "$backoff_secs" ]; then
+                log "已连续失败 ${cnt} 次，退避中（每 $((backoff_secs / 60)) 分钟重试一次）"
                 return 1
             fi
             do_login

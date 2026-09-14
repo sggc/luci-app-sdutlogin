@@ -19,6 +19,18 @@ interval = s:option(Value, "interval", translate("检测间隔"), translate("每
 interval.default = 5
 interval.datatype = "min(1)"
 
+o1 = s:option(Value, "backoff_max", translate("退避阈值"), translate("连续失败几次后进入退避模式，0=永不退避"))
+o1.default = 5
+o1.datatype = "min(0)"
+
+o2 = s:option(Value, "backoff_secs", translate("退避间隔(秒)"), translate("退避模式下每次重试的间隔秒数"))
+o2.default = 1800
+o2.datatype = "min(60)"
+
+o3 = s:option(Value, "backoff_stop", translate("停止重试"), translate("连续失败几次后永不重试（需手动重新启用），0=永不停止"))
+o3.default = 0
+o3.datatype = "min(0)"
+
 success = s:option(DummyValue,"opennewwindow",translate("认证页面"))
 success.description = translate("<input type=\"button\" class=\"cbi-button cbi-button-save\" value=\"打开认证页\" onclick=\"window.open('http://111.17.200.130/')\" /><input type=\"button\" class=\"cbi-button cbi-button-save\" value=\"打开自助服务\" onclick=\"window.open('http://111.17.200.130:8081/Self/login')\" /><br />可查看认证状态和管理在线设备")
 

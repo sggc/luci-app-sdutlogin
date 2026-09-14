@@ -3,4 +3,7 @@ config login
 	option username ''
 	option password ''
 	option interval '5'
+	option backoff_max '5'
+	option backoff_secs '1800'
+	option backoff_stop '0'
 
