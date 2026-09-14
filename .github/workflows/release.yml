@@ -25,7 +25,9 @@ jobs:
             VERSION="2.0-$(date +%Y%m%d)"
             TAG="v$VERSION"
           fi
+          APK_VERSION="${VERSION%%-*}-r${VERSION##*-}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "apk_version=$APK_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Build ipk
@@ -40,7 +42,7 @@ jobs:
             apk mkpkg --help 2>&1 | head -5 || true
             apk mkpkg \
               --info "name:luci-app-sdutlogin" \
-              --info "version:${{ steps.ver.outputs.version }}" \
+              --info "version:${{ steps.ver.outputs.apk_version }}" \
               --info "description:SDUT campus network auto login (AES encrypted portal protocol)" \
               --info "arch:noarch" \
               --info "license:GPL-2.0" \
@@ -50,8 +52,8 @@ jobs:
               --info "depends:openssl-util" \
               --script "post-install:post-install" \
               --files "data" \
-              --output "luci-app-sdutlogin-${{ steps.ver.outputs.version }}.apk"
-            echo "Created luci-app-sdutlogin-${{ steps.ver.outputs.version }}.apk"
+              --output "luci-app-sdutlogin-${{ steps.ver.outputs.apk_version }}.apk"
+            echo "Created luci-app-sdutlogin-${{ steps.ver.outputs.apk_version }}.apk"
             ls -lh *.apk
           '
 
