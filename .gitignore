@@ -1,0 +1,7 @@
+*.ipk
+*.apk
+data/
+control/
+apk-control/
+*.tar.gz
+debian-binary
