@@ -60,6 +60,7 @@ echo "Created ${PKG_NAME}_${VERSION}_all.ipk"
 echo "--- Building apk ---"
 PKGVER=$(echo "$VERSION" | sed 's/-/-r/')
 mkdir -p apk-control
+DATASIZE=$(du -sb data | cut -f1)
 cat > apk-control/.PKGINFO << EOF
 pkgname = $PKG_NAME
 pkgver = $PKGVER
@@ -67,17 +68,19 @@ pkgdesc = SDUT campus network auto login
 url = https://github.com/sggc/luci-app-sdutlogin
 builddate = $(date +%s)
 packager = sggc
+size = $DATASIZE
 arch = all
-depend = openssl-util
 origin = $PKG_NAME
+maintainer = sggc <sggc@users.noreply.github.com>
+depend = openssl-util
 EOF
 cat > apk-control/.post-install << 'EOF'
 #!/bin/sh
 [ -x /etc/init.d/sdutlogin ] && /etc/init.d/sdutlogin enable
 exit 0
 EOF
-tar cz -C apk-control . > apk-control.tar.gz
-tar cz -C data . > apk-data.tar.gz
+tar cz -C apk-control .PKGINFO .post-install > apk-control.tar.gz
+tar cz -C data etc usr > apk-data.tar.gz
 cat apk-control.tar.gz apk-data.tar.gz > ${PKG_NAME}-${PKGVER}.apk
 echo "Created ${PKG_NAME}-${PKGVER}.apk"
 
