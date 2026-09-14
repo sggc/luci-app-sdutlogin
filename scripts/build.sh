@@ -57,35 +57,18 @@ ar rc ${PKG_NAME}_${VERSION}_all.ipk debian-binary control.tar.gz data.tar.gz
 echo "Created ${PKG_NAME}_${VERSION}_all.ipk"
 
 # ===== apk (OpenWrt 24.10+) =====
-echo "--- Building apk ---"
-PKGVER=$(echo "$VERSION" | sed 's/-/-r/')
-mkdir -p apk-control
-DATASIZE=$(du -sb data | cut -f1)
-cat > apk-control/.PKGINFO << EOF
-pkgname = $PKG_NAME
-pkgver = $PKGVER
-pkgdesc = SDUT campus network auto login
-url = https://github.com/sggc/luci-app-sdutlogin
-builddate = $(date +%s)
-packager = sggc
-size = $DATASIZE
-arch = all
-origin = $PKG_NAME
-maintainer = sggc <sggc@users.noreply.github.com>
-depend = openssl-util
-EOF
-cat > apk-control/.post-install << 'EOF'
+# apk 包使用 ADB 格式（apk mkpkg 生成），无法手工构造
+# 由 release.yml 中的 Alpine Docker 步骤用 apk mkpkg 构建
+echo "--- Preparing apk metadata ---"
+cat > post-install << 'EOF'
 #!/bin/sh
 [ -x /etc/init.d/sdutlogin ] && /etc/init.d/sdutlogin enable
 exit 0
 EOF
-tar cz -C apk-control .PKGINFO .post-install > apk-control.tar.gz
-tar cz -C data etc usr > apk-data.tar.gz
-cat apk-control.tar.gz apk-data.tar.gz > ${PKG_NAME}-${PKGVER}.apk
-echo "Created ${PKG_NAME}-${PKGVER}.apk"
+echo "data/ and post-install ready for apk mkpkg"
 
-# 清理中间文件
-rm -rf data control apk-control *.tar.gz debian-binary
+# 清理 ipk 中间文件（保留 data/ 和 post-install 给 apk 用）
+rm -rf control *.tar.gz debian-binary
 
-echo "=== Done ==="
-ls -lh *.ipk *.apk
+echo "=== ipk Done ==="
+ls -lh *.ipk

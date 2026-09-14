@@ -28,8 +28,32 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Build ipk and apk
+      - name: Build ipk
         run: bash scripts/build.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Build apk (via Alpine Docker)
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work alpine:edge sh -c '
+            set -e
+            echo "apk version:"; apk --version
+            echo "Checking mkpkg subcommand:"
+            apk mkpkg --help 2>&1 | head -5 || true
+            apk mkpkg \
+              --info "name:luci-app-sdutlogin" \
+              --info "version:${{ steps.ver.outputs.version }}" \
+              --info "description:SDUT campus network auto login (AES encrypted portal protocol)" \
+              --info "arch:noarch" \
+              --info "license:GPL-2.0" \
+              --info "origin:luci-app-sdutlogin" \
+              --info "url:https://github.com/sggc/luci-app-sdutlogin" \
+              --info "maintainer:sggc <sggc@users.noreply.github.com>" \
+              --info "depends:openssl-util" \
+              --script "post-install:post-install" \
+              --files "data" \
+              --output "luci-app-sdutlogin-${{ steps.ver.outputs.version }}.apk"
+            echo "Created luci-app-sdutlogin-${{ steps.ver.outputs.version }}.apk"
+            ls -lh *.apk
+          '
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -40,7 +64,6 @@ jobs:
             *.apk
 
       - name: Create Release
-
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
