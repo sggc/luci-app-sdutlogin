@@ -26,13 +26,13 @@ stat.cfgvalue = function(self, section)
 	end
 	local html = ""
 	if not running then
-		html = '<span style="color:#999;font-weight:bold">\\u25CF 已停止</span>'
+		html = '<span style="color:#999;font-weight:bold">&#9679; 已停止</span>'
 	elseif online == "1" then
-		html = '<span style="color:#5cb85c;font-weight:bold">\\u25CF 已启动 \\u00B7 在线</span>'
+		html = '<span style="color:#5cb85c;font-weight:bold">&#9679; 已启动 &#183; 在线</span>'
 	elseif online == "0" then
-		html = '<span style="color:#d9534f;font-weight:bold">\\u25CF 已启动 \\u00B7 离线</span>'
+		html = '<span style="color:#d9534f;font-weight:bold">&#9679; 已启动 &#183; 离线</span>'
 	else
-		html = '<span style="color:#999;font-weight:bold">\\u25CF 已启动 \\u00B7 未知</span>'
+		html = '<span style="color:#999;font-weight:bold">&#9679; 已启动 &#183; 未知</span>'
 	end
 	if last_check ~= "" then
 		html = html .. ' <span style="color:#999;font-size:12px">(检测于 ' .. last_check .. ')</span>'
@@ -89,7 +89,7 @@ end
 
 local apply = luci.http.formvalue("cbi.apply")
 if apply then
-	io.popen("/etc/init.d/sdutlogin restart")
+	luci.sys.call("/etc/init.d/sdutlogin restart; sleep 2")
 end
 
 return m
