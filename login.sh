@@ -14,6 +14,7 @@ dir="/tmp/log/sdutlogin/"
 mkdir -p "$dir"
 logfile="${dir}sdutlogin.log"
 pidpath="${dir}run.pid"
+STATE_FILE="/tmp/sdutlogin.state"
 
 HOST="111.17.200.130"
 PORTAL_PORT="801"
@@ -29,6 +30,9 @@ PASSWORD=$(uci -q get sdutlogin.@login[0].password 2>/dev/null)
 interval=$(uci -q get sdutlogin.@login[0].interval 2>/dev/null)
 [ -z "$interval" ] && interval=5
 interval=$((interval * 60))
+quiet_start=$(uci -q get sdutlogin.@login[0].quiet_start 2>/dev/null)
+quiet_end=$(uci -q get sdutlogin.@login[0].quiet_end 2>/dev/null)
+logout_time=$(uci -q get sdutlogin.@login[0].logout_time 2>/dev/null)
 
 # 加密实现自动探测: openssl -> lua(同目录 aes.lua)
 CRYPTO=""
@@ -205,6 +209,83 @@ do_check() {
     esac
 }
 
+# 静默时段判断（支持跨午夜，如 23:00-06:00）
+is_quiet() {
+    [ -z "$quiet_start" ] || [ -z "$quiet_end" ] && return 1
+    [ "$quiet_start" = "$quiet_end" ] && return 1
+    local now_h now_m cur start_h start_m end_h end_m start end
+    now_h=$(date +%H); now_m=$(date +%M)
+    cur=$((now_h * 60 + now_m))
+    start_h=${quiet_start%:*}; start_m=${quiet_start#*:}
+    end_h=${quiet_end%:*}; end_m=${quiet_end#*:}
+    start=$((start_h * 60 + start_m))
+    end=$((end_h * 60 + end_m))
+    if [ $start -le $end ]; then
+        [ $cur -ge $start ] && [ $cur -lt $end ] && return 0
+    else
+        { [ $cur -ge $start ] || [ $cur -lt $end ]; } && return 0
+    fi
+    return 1
+}
+
+# 注销（踢出账号）：Dr.COM eportal logout 接口
+do_logout() {
+    get_state
+    [ -n "$IP" ] || { log "注销失败：无法获取 IP"; return 1; }
+    local ipb64 resp
+    ipb64=$(b64 "$IP")
+    resp=$(fetch "http://$HOST:$PORTAL_PORT/eportal/portal/logout?callback=dr$$_lo&wlan_user_ip=$ipb64&wlan_user_ipv6=&wlan_user_mac=000000000000&wlan_ac_ip=&wlan_ac_name=&jsVersion=4.2.1&v=$$_&lang=zh")
+    log "注销响应: $(printf '%s' "$resp" | head -c 200)"
+    if is_online; then
+        log "注销失败：仍在线"
+        return 1
+    fi
+    log "注销成功（已踢出账号）"
+    return 0
+}
+
+# 定时退出检查：到点踢出账号，当天不重复
+check_logout() {
+    [ -z "$logout_time" ] && return
+    local now_h now_m cur tgt_h tgt_m tgt today done_day
+    now_h=$(date +%H); now_m=$(date +%M)
+    cur=$((now_h * 60 + now_m))
+    tgt_h=${logout_time%:*}; tgt_m=${logout_time#*:}
+    tgt=$((tgt_h * 60 + tgt_m))
+    [ $cur -lt $tgt ] && return
+    today=$(date +%Y%m%d)
+    done_day=""
+    [ -f "$STATE_FILE" ] && done_day=$(grep -o "^logout_done=.*" "$STATE_FILE" 2>/dev/null | cut -d= -f2)
+    [ "$today" = "$done_day" ] && return
+    log "到达定时退出时间 $logout_time，执行注销"
+    do_logout
+    sed -i "/^logout_done=/d" "$STATE_FILE" 2>/dev/null
+    echo "logout_done=$today" >> "$STATE_FILE"
+}
+
+# 状态文件读写
+last_login_ts=0
+load_state() {
+    [ -f "$STATE_FILE" ] || return
+    local v
+    v=$(grep -o "^last_login=.*" "$STATE_FILE" 2>/dev/null | cut -d= -f2)
+    [ -n "$v" ] && last_login_ts=$v
+}
+
+write_state() {
+    local online=$1
+    local today done_day
+    today=$(date +%Y%m%d)
+    done_day=""
+    [ -f "$STATE_FILE" ] && done_day=$(grep -o "^logout_done=.*" "$STATE_FILE" 2>/dev/null | cut -d= -f2)
+    cat > "$STATE_FILE" <<EOF
+online=$online
+last_check=$(date +%s)
+last_login=$last_login_ts
+logout_done=$done_day
+EOF
+}
+
 reducelog() {
     [ -f "$logfile" ] && local logrow=$(grep -c "" "$logfile") || local logrow="0"
     [ "$logrow" -gt 500 ] && sed -i '1,100d' "$logfile" && log "日志超出上限(500行)，删除前 100 条"
@@ -220,11 +301,34 @@ if [ -f "$pidpath" ]; then
     sleep 1
 fi
 echo $$ > "$pidpath"
+load_state
 log "进程已启动 pid:$$ [加密: ${CRYPTO:-无}]"
 
 # 主循环
 while true; do
-    do_check
+    # 定时退出检查（即使静默时段也执行，到点就踢）
+    check_logout
+
+    # 检查今天是否已踢出（踢出后当天不再登录）
+    today=$(date +%Y%m%d)
+    done_day=""
+    [ -f "$STATE_FILE" ] && done_day=$(grep -o "^logout_done=.*" "$STATE_FILE" 2>/dev/null | cut -d= -f2)
+
+    if [ "$today" = "$done_day" ]; then
+        write_state 0
+    elif is_quiet; then
+        log "当前处于静默时段 $quiet_start-$quiet_end，跳过检测"
+        write_state 0
+    else
+        do_check
+        if is_online; then
+            last_login_ts=$(date +%s)
+            write_state 1
+        else
+            write_state 0
+        fi
+    fi
+
     reducelog
     sleep "$interval"
 done
