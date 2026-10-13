@@ -39,7 +39,7 @@ Architecture: all
 Maintainer: sggc <sggc@users.noreply.github.com>
 Section: luci
 Priority: optional
-Depends: openssl-util, luci-lua-runtime
+Depends: openssl-util, luci-compat
 Source: https://github.com/sggc/luci-app-sdutlogin
 Description: SDUT campus network auto login (AES encrypted portal protocol)
 EOF

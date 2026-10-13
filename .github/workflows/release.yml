@@ -49,7 +49,7 @@ jobs:
               --info "origin:luci-app-sdutlogin" \
               --info "url:https://github.com/sggc/luci-app-sdutlogin" \
               --info "maintainer:sggc <sggc@users.noreply.github.com>" \
-              --info "depends:openssl-util luci-lua-runtime" \
+              --info "depends:openssl-util luci-compat" \
               --script "post-install:post-install" \
               --files "data" \
               --output "luci-app-sdutlogin-${{ steps.ver.outputs.apk_version }}.apk"
