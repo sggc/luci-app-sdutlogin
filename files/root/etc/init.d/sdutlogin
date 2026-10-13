@@ -16,7 +16,7 @@ start()
 	if [ -n "$state" ]; then
 		restart
 	else
-		/usr/lib/sdutlogin/login.sh &
+		/usr/lib/sdutlogin/login.sh >/dev/null 2>&1 &
 	fi
 	echo "$(date "+%Y-%m-%d %H:%M:%S"): 已启动"
 }
