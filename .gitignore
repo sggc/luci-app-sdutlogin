@@ -4,4 +4,4 @@ data/
 control/
 apk-control/
 *.tar.gz
-debian-binary
+debian-binary.vs/
