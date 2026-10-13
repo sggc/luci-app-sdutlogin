@@ -7,6 +7,11 @@ start()
 	if [ ! -d /tmp/log/sdutlogin ]; then
 		mkdir -p /tmp/log/sdutlogin
 	fi
+	enable=$(uci -q get sdutlogin.@login[0].enable 2>/dev/null)
+	if [ "$enable" != "1" ]; then
+		echo "$(date "+%Y-%m-%d %H:%M:%S"): 未启用，不启动"
+		return
+	fi
 	state=$(pgrep -f "/usr/lib/sdutlogin/login.sh")
 	if [ -n "$state" ]; then
 		restart

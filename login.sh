@@ -305,6 +305,7 @@ load_state
 log "进程已启动 pid:$$ [加密: ${CRYPTO:-无}]"
 
 # 主循环
+last_online=-1
 while true; do
     # 定时退出检查（即使静默时段也执行，到点就踢）
     check_logout
@@ -315,17 +316,24 @@ while true; do
     [ -f "$STATE_FILE" ] && done_day=$(grep -o "^logout_done=.*" "$STATE_FILE" 2>/dev/null | cut -d= -f2)
 
     if [ "$today" = "$done_day" ]; then
+        [ "$last_online" != "0" ] && log "今天已执行定时退出，暂停登录"
         write_state 0
+        last_online=0
     elif is_quiet; then
-        log "当前处于静默时段 $quiet_start-$quiet_end，跳过检测"
+        [ "$last_online" != "-2" ] && log "静默时段 $quiet_start-$quiet_end，跳过检测"
         write_state 0
+        last_online=-2
     else
         do_check
         if is_online; then
+            [ "$last_online" != "1" ] && log "网络正常，已在线"
             last_login_ts=$(date +%s)
             write_state 1
+            last_online=1
         else
+            [ "$last_online" != "0" ] && log "网络异常，离线"
             write_state 0
+            last_online=0
         fi
     fi
 

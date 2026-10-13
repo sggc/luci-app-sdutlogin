@@ -6,33 +6,30 @@ s = m:section(TypedSection, "login", "")
 s.addremove = false
 s.anonymous = true
 
--- 运行状态显示
+-- 运行状态显示（JS 实时轮询）
 stat = s:option(DummyValue, "_status", translate("运行状态"))
 stat.rawhtml = true
 stat.cfgvalue = function(self, section)
-	local running = luci.sys.call("pgrep -f /usr/lib/sdutlogin/login.sh >/dev/null 2>&1") == 0
-	local online = "未知"
-	local last_check = ""
-	local f = io.open("/tmp/sdutlogin.state", "r")
-	if f then
-		for line in f:lines() do
-			local k, v = line:match("^(%w+)=(.*)$")
-			if k == "online" then
-				online = (v == "1") and "在线" or "离线"
-			elseif k == "last_check" and v ~= "" then
-				last_check = os.date("%H:%M:%S", tonumber(v) or 0)
-			end
-		end
-		f:close()
-	end
-	if not running then
-		return '<span style="color:#999;font-weight:bold">● 已停止</span>'
-	end
-	if online == "在线" then
-		return '<span style="color:#5cb85c;font-weight:bold">● 已启动 · 在线</span>' .. (last_check ~= "" and (' <span style="color:#999">(检测于 ' .. last_check .. ')</span>') or "")
-	else
-		return '<span style="color:#d9534f;font-weight:bold">● 已启动 · 离线</span>' .. (last_check ~= "" and (' <span style="color:#999">(检测于 ' .. last_check .. ')</span>') or "")
-	end
+	return '<span id="sdut_stat" style="font-size:14px">检测中...</span>'
+		.. '<script>'
+		.. '(function(){'
+		.. 'var el=document.getElementById("sdut_stat");'
+		.. 'function upd(){'
+		.. 'fetch("/cgi-bin/luci/admin/services/sdutlogin/status")'
+		.. '.then(function(r){return r.json();})'
+		.. '.then(function(d){'
+		.. 'var h="";'
+		.. 'if(!d.running){h=\'<span style="color:#999;font-weight:bold">\\u25CF 已停止</span>\';}'
+		.. 'else if(d.online=="1"){h=\'<span style="color:#5cb85c;font-weight:bold">\\u25CF 已启动 \\u00B7 在线</span>\';}'
+		.. 'else if(d.online=="0"){h=\'<span style="color:#d9534f;font-weight:bold">\\u25CF 已启动 \\u00B7 离线</span>\';}'
+		.. 'else{h=\'<span style="color:#999;font-weight:bold">\\u25CF 已启动 \\u00B7 未知</span>\';}'
+		.. 'if(d.last_check){h+=\' <span style="color:#999;font-size:12px">(检测于 \'+d.last_check+\')</span>\';}'
+		.. 'el.innerHTML=h;'
+		.. '}).catch(function(){el.innerHTML=\'<span style="color:#999">状态获取失败</span>\';});'
+		.. '}'
+		.. 'upd();setInterval(upd,5000);'
+		.. '})();'
+		.. '</script>'
 end
 
 enable = s:option(Flag, "enable", translate("启用"), translate("启用后即会检测上网状态，并尝试自动拨号"))
