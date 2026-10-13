@@ -14,7 +14,7 @@ define Package/luci-app-sdutlogin
 	SUBMENU:=3. Applications
 	TITLE:=SDUT Campus Network Login for LuCI
 	PKGARCH:=all
-	DEPENDS:=+openssl-util
+	DEPENDS:=+openssl-util +luci-lua-runtime
 endef
 
 define Package/luci-app-sdutlogin/description

@@ -39,7 +39,7 @@ Architecture: all
 Maintainer: sggc <sggc@users.noreply.github.com>
 Section: luci
 Priority: optional
-Depends: +openssl-util
+Depends: openssl-util, luci-lua-runtime
 Source: https://github.com/sggc/luci-app-sdutlogin
 Description: SDUT campus network auto login (AES encrypted portal protocol)
 EOF
@@ -53,7 +53,11 @@ chmod 755 control/postinst
 tar czf control.tar.gz -C control .
 
 echo "2.0" > debian-binary
-ar rc ${PKG_NAME}_${VERSION}_all.ipk debian-binary control.tar.gz data.tar.gz
+if command -v ar > /dev/null 2>&1; then
+    ar rc ${PKG_NAME}_${VERSION}_all.ipk debian-binary control.tar.gz data.tar.gz
+else
+    python scripts/mkipk.py ${PKG_NAME}_${VERSION}_all.ipk debian-binary control.tar.gz data.tar.gz
+fi
 echo "Created ${PKG_NAME}_${VERSION}_all.ipk"
 
 # ===== apk (OpenWrt 24.10+) =====
