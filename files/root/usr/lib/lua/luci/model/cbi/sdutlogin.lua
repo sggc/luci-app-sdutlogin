@@ -53,10 +53,10 @@ interval = s:option(Value, "interval", translate("检测间隔"), translate("每
 interval.default = 5
 interval.datatype = "min(1)"
 
--- 静默时段（时间段停止检测）
-quiet_start = s:option(Value, "quiet_start", translate("静默开始"), translate("在此时间段内停止检测和登录，留空=不启用。格式 HH:MM，如 23:00"))
+-- 工作时段（仅此时段内检测和登录，其余时间静默）
+quiet_start = s:option(Value, "quiet_start", translate("工作开始"), translate("仅在此时段内检测和登录，其余时间静默。留空=全天工作。格式 HH:MM，如 07:00"))
 quiet_start.placeholder = "HH:MM"
-quiet_end = s:option(Value, "quiet_end", translate("静默结束"), translate("静默时段结束时间，支持跨午夜（如开始 23:00 结束 06:00）"))
+quiet_end = s:option(Value, "quiet_end", translate("工作结束"), translate("工作时段结束时间，支持跨午夜（如开始 20:00 结束 07:00 表示夜间工作）"))
 quiet_end.placeholder = "HH:MM"
 
 -- 定时退出（踢出账号）
@@ -76,19 +76,27 @@ o3 = s:option(Value, "backoff_stop", translate("停止重试"), translate("连�
 o3.default = 0
 o3.datatype = "min(0)"
 
--- 快捷链接（修复灰色按钮 + 排版）
-links = s:option(DummyValue, "_links", translate("快捷链接"))
+-- 快捷链接 + 一键下线
+links = s:option(DummyValue, "_links", translate("快捷操作"))
 links.rawhtml = true
 links.cfgvalue = function(self, section)
 	return '<div style="margin:8px 0">'
+		.. '<input type="submit" name="cbi_login" class="btn cbi-button cbi-button-apply" style="margin-right:12px" value="一键登录" />'
+		.. '<input type="submit" name="cbi_logout" class="btn cbi-button cbi-button-remove" style="margin-right:12px" value="一键下线" />'
 		.. '<input type="button" class="btn cbi-button cbi-button-apply" style="margin-right:12px" value="打开认证页" onclick="window.open(\'http://111.17.200.130/\')" />'
 		.. '<input type="button" class="btn cbi-button cbi-button-apply" value="打开自助服务" onclick="window.open(\'http://111.17.200.130:8081/Self/login\')" />'
 		.. '</div>'
-		.. '<div style="color:#888;font-size:12px">可查看认证状态和管理在线设备</div>'
+		.. '<div style="color:#888;font-size:12px">一键登录/下线立即执行；认证页/自助服务可查看状态和管理设备</div>'
 end
 
 local apply = luci.http.formvalue("cbi.apply")
-if apply then
+local login_btn = luci.http.formvalue("cbi_login")
+local logout = luci.http.formvalue("cbi_logout")
+if login_btn then
+	luci.sys.call("/usr/lib/sdutlogin/login.sh login 2>/dev/null")
+elseif logout then
+	luci.sys.call("/usr/lib/sdutlogin/login.sh logout 2>/dev/null")
+elseif apply then
 	luci.sys.call("/etc/init.d/sdutlogin restart; sleep 2")
 end
 

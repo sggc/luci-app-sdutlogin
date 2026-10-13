@@ -13,13 +13,15 @@
 dir="/tmp/log/sdutlogin/"
 mkdir -p "$dir"
 logfile="${dir}sdutlogin.log"
-pidpath="${dir}run.pid"
+
 STATE_FILE="/tmp/sdutlogin.state"
+COOKIE_FILE="/tmp/sdut_cookies"
 
 HOST="111.17.200.130"
 PORTAL_PORT="801"
 AESKEY_HEX="35633164356164346465613065386464"   # "5c1d5ad4dea0e8dd" 的 hex
-UA_LC="mozilla/5.0 (windows nt 10.0; win64; x64) applewebkit/537.36 (khtml, like gecko) chrome/120.0.0.0 safari/537.36"
+UA_LC="mozilla/5.0 (windows nt 10.0; win64; x64) appwebkit/537.36 (khtml, like gecko) chrome/152.0.0.0 safari/537.36 edg/152.0.0.0"
+UA_HTTP="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36 Edg/152.0.0.0"
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd) || SCRIPT_DIR="."
 
@@ -51,7 +53,13 @@ log() {
 }
 
 fetch() {
-    wget -q -T 6 -O - "$1" 2>/dev/null
+    wget -q -T 6 -O - \
+        --header="User-Agent: $UA_HTTP" \
+        --header="Referer: http://$HOST/" \
+        --load-cookies="$COOKIE_FILE" \
+        --save-cookies="$COOKIE_FILE" \
+        --keep-session-cookies \
+        "$1" 2>/dev/null
 }
 
 urlencode() {
@@ -120,6 +128,8 @@ try_portal() {
     local ipb64 cfg rcn inner enc resp pesc payload
     ipb64=$(b64 "$IP")
     [ -n "$ipb64" ] || return 1
+    # chkstatus（老协议状态查询，与 Python page_init 一致，失败可继续）
+    fetch "http://$HOST/drcom/chkstatus?callback=dr$$_chk&v=$$_&lang=zh" >/dev/null 2>&1
     cfg=$(fetch "http://$HOST:$PORTAL_PORT/eportal/portal/page/loadConfig?callback=dr$$_cfg&program_index=&wlan_vlan_id=1&wlan_user_ip=$ipb64&wlan_user_ipv6=&wlan_user_ssid=&wlan_user_areaid=&wlan_ac_ip=&wlan_ap_mac=&gw_id=&jsVersion=4.2.1&v=$$_&lang=zh")
     rcn=$(printf '%s' "$cfg" | grep -o '"rcn":"[A-Za-z0-9]*"' | head -n1 | cut -d'"' -f4)
     [ -n "$rcn" ] || rcn=$(printf '%08d' $(( ($$ + $(date +%s)) % 100000000 )))
@@ -132,7 +142,7 @@ try_portal() {
     fi
     pesc=$(json_escape "$PASSWORD")
     payload=$(printf '{"login_method":1,"user_account":",0,%s","user_password":"%s","wlan_user_ip":"%s","wlan_user_ipv6":"","wlan_user_mac":"000000000000","wlan_ac_ip":"","wlan_ac_name":"","jsVersion":"4.2.1","login_t":"0","js_status":"0","is_page":"1","is_page_new":%s,"terminal_type":1,"lang":"zh-cn","rcn":"%s"}' \
-        "$USERNAME" "$pesc" "$IP" "$(( ($$ + $(date +%s)) % 9000 + 500 ))" "$rcn")
+        "$USERNAME" "$pesc" "$IP" "$(( ($$ + $(date +%s)) % 10000 + 500 ))" "$rcn")
     enc=$(aes_b64 "$payload")
     [ -n "$enc" ] || { log "AES 加密失败"; return 1; }
     resp=$(fetch "http://$HOST:$PORTAL_PORT/eportal/portal/login?callback=dr$$_li&params=$(urlencode "$enc")&jsVersion=4.2.1&v=$$_&lang=zh")
@@ -209,7 +219,8 @@ do_check() {
     esac
 }
 
-# 静默时段判断（支持跨午夜，如 23:00-06:00）
+# 工作时段判断（支持跨午夜，如 20:00-07:00）
+# 在工作时段内返回 1（不静默），在工作时段外返回 0（静默）
 is_quiet() {
     [ -z "$quiet_start" ] || [ -z "$quiet_end" ] && return 1
     [ "$quiet_start" = "$quiet_end" ] && return 1
@@ -221,27 +232,34 @@ is_quiet() {
     start=$((start_h * 60 + start_m))
     end=$((end_h * 60 + end_m))
     if [ $start -le $end ]; then
-        [ $cur -ge $start ] && [ $cur -lt $end ] && return 0
+        [ $cur -ge $start ] && [ $cur -lt $end ] && return 1
     else
-        { [ $cur -ge $start ] || [ $cur -lt $end ]; } && return 0
+        { [ $cur -ge $start ] || [ $cur -lt $end ]; } && return 1
     fi
-    return 1
+    return 0
 }
 
-# 注销（踢出账号）：Dr.COM eportal logout 接口
+# 注销（踢出账号）：与 Python 版完全一致，AES 加密后作为 params 发送
 do_logout() {
     get_state
     [ -n "$IP" ] || { log "注销失败：无法获取 IP"; return 1; }
-    local ipb64 resp
-    ipb64=$(b64 "$IP")
-    resp=$(fetch "http://$HOST:$PORTAL_PORT/eportal/portal/logout?callback=dr$$_lo&wlan_user_ip=$ipb64&wlan_user_ipv6=&wlan_user_mac=000000000000&wlan_ac_ip=&wlan_ac_name=&jsVersion=4.2.1&v=$$_&lang=zh")
+    [ -n "$CRYPTO" ] || { log "注销需要加密支持 (openssl/lua)"; return 1; }
+    local payload enc resp
+    payload=$(printf '{"login_method":1,"user_account":"drcom","user_password":"123","ac_logout":0,"register_mode":0,"wlan_user_ip":"%s","wlan_user_ipv6":"","wlan_vlan_id":1,"wlan_user_mac":"000000000000","wlan_ac_ip":"","wlan_ac_name":"","jsVersion":"4.2.1"}' "$IP")
+    enc=$(aes_b64 "$payload")
+    [ -n "$enc" ] || { log "注销 AES 加密失败"; return 1; }
+    resp=$(fetch "http://$HOST:$PORTAL_PORT/eportal/portal/logout?callback=dr$$_lo&params=$(urlencode "$enc")&jsVersion=4.2.1&v=$$_&lang=zh")
     log "注销响应: $(printf '%s' "$resp" | head -c 200)"
-    if is_online; then
-        log "注销失败：仍在线"
-        return 1
-    fi
-    log "注销成功（已踢出账号）"
-    return 0
+    case "$resp" in
+        *'"result":1'*|*'"result":"1"'*)
+            log "注销成功（已踢出账号）"
+            return 0
+            ;;
+        *)
+            log "注销失败"
+            return 1
+            ;;
+    esac
 }
 
 # 定时退出检查：到点踢出账号，当天不重复
@@ -292,15 +310,28 @@ reducelog() {
 }
 
 # ---- 入口 ----
+# logout 子命令：只执行注销，不进入主循环
+case "$1" in
+    logout)
+        log "手动执行注销"
+        do_logout
+        exit $?
+        ;;
+    login)
+        log "手动执行登录"
+        do_login
+        if is_online; then
+            log "手动登录成功"
+            exit 0
+        fi
+        log "手动登录失败"
+        exit 1
+        ;;
+esac
+
 [ "$enable" != "1" ] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] 未启用,停止运行..." > "$logfile" && exit 0
 
-# 进程管理：终止之前的实例
-if [ -f "$pidpath" ]; then
-    kill -9 "$(cat "$pidpath")" >/dev/null 2>&1
-    rm -rf "$pidpath"
-    sleep 1
-fi
-echo $$ > "$pidpath"
+
 load_state
 log "进程已启动 pid:$$ [加密: ${CRYPTO:-无}]"
 
@@ -320,7 +351,7 @@ while true; do
         write_state 0
         last_online=0
     elif is_quiet; then
-        [ "$last_online" != "-2" ] && log "静默时段 $quiet_start-$quiet_end，跳过检测"
+        [ "$last_online" != "-2" ] && log "非工作时段（$quiet_start-$quiet_end 外），跳过检测"
         write_state 0
         last_online=-2
     else
