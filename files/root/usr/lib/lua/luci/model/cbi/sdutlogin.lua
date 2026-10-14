@@ -102,8 +102,10 @@ if login_btn then
 	luci.sys.call("/usr/lib/sdutlogin/login.sh login 2>/dev/null")
 elseif logout then
 	luci.sys.call("/usr/lib/sdutlogin/login.sh logout 2>/dev/null")
-elseif apply then
-	luci.sys.call("/etc/init.d/sdutlogin restart; sleep 2")
+end
+
+m.on_after_commit = function(self)
+	luci.sys.call("/etc/init.d/sdutlogin restart 2>/dev/null")
 end
 
 return m
