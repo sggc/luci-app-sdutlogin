@@ -380,7 +380,11 @@ case "$1" in
         ;;
 esac
 
-[ "$enable" != "1" ] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] 未启用,停止运行..." > "$logfile" && exit 0
+[ "$enable" != "1" ] && {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 未启用,停止运行..." > "$logfile"
+    rm -f "$STATE_FILE"
+    exit 0
+}
 
 
 load_state
@@ -423,5 +427,16 @@ while true; do
     fi
 
     reducelog
-    sleep "$interval"
+    # 分段 sleep，每分钟检查 enable 变化
+    slept=0
+    while [ $slept -lt $interval ]; do
+        sleep 60
+        slept=$((slept + 60))
+        enable=$(uci -q get sdutlogin.@login[0].enable 2>/dev/null)
+        [ "$enable" != "1" ] && {
+            log "运行中被禁用，停止"
+            rm -f "$STATE_FILE"
+            exit 0
+        }
+    done
 done

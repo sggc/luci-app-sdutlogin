@@ -7,7 +7,10 @@ start_service()
 {
 	local enable
 	enable=$(uci -q get sdutlogin.@login[0].enable 2>/dev/null)
-	[ "$enable" != "1" ] && return
+	[ "$enable" != "1" ] && {
+		rm -f /tmp/sdutlogin.state /tmp/sdut_wifi_off
+		return
+	}
 
 	mkdir -p /tmp/log/sdutlogin
 
@@ -17,5 +20,10 @@ start_service()
 	procd_set_param stdout 1
 	procd_set_param stderr 1
 	procd_close_instance
+}
+
+stop_service()
+{
+	rm -f /tmp/sdutlogin.state /tmp/sdut_wifi_off
 }
 
