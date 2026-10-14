@@ -35,6 +35,8 @@ interval=$((interval * 60))
 quiet_start=$(uci -q get sdutlogin.@login[0].quiet_start 2>/dev/null)
 quiet_end=$(uci -q get sdutlogin.@login[0].quiet_end 2>/dev/null)
 logout_time=$(uci -q get sdutlogin.@login[0].logout_time 2>/dev/null)
+wifi_off_start=$(uci -q get sdutlogin.@login[0].wifi_off_start 2>/dev/null)
+wifi_off_end=$(uci -q get sdutlogin.@login[0].wifi_off_end 2>/dev/null)
 
 # 加密实现自动探测: openssl -> lua(同目录 aes.lua)
 CRYPTO=""
@@ -281,6 +283,55 @@ check_logout() {
     echo "logout_done=$today" >> "$STATE_FILE"
 }
 
+# WiFi 定时关闭：在指定时段关闭 WiFi，时段外开启
+WIFI_OFF_FLAG="/tmp/sdut_wifi_off"
+check_wifi() {
+    [ -z "$wifi_off_start" ] || [ -z "$wifi_off_end" ] && {
+        if [ -f "$WIFI_OFF_FLAG" ]; then
+            uci set wireless.radio0.disabled=0
+            uci set wireless.radio1.disabled=0
+            uci commit wireless
+            wifi reload
+            rm -f "$WIFI_OFF_FLAG"
+            log "WiFi 已重新开启（未设置关闭时段）"
+        fi
+        return
+    }
+    [ "$wifi_off_start" = "$wifi_off_end" ] && return
+    local now_h now_m cur start_h start_m end_h end_m start end in_range
+    now_h=$(date +%H); now_m=$(date +%M)
+    cur=$((now_h * 60 + now_m))
+    start_h=${wifi_off_start%:*}; start_m=${wifi_off_start#*:}
+    end_h=${wifi_off_end%:*}; end_m=${wifi_off_end#*:}
+    start=$((start_h * 60 + start_m))
+    end=$((end_h * 60 + end_m))
+    in_range=0
+    if [ $start -le $end ]; then
+        [ $cur -ge $start ] && [ $cur -lt $end ] && in_range=1
+    else
+        { [ $cur -ge $start ] || [ $cur -lt $end ]; } && in_range=1
+    fi
+    if [ $in_range -eq 1 ]; then
+        if [ ! -f "$WIFI_OFF_FLAG" ]; then
+            uci set wireless.radio0.disabled=1
+            uci set wireless.radio1.disabled=1
+            uci commit wireless
+            wifi reload
+            touch "$WIFI_OFF_FLAG"
+            log "WiFi 定时关闭（$wifi_off_start-$wifi_off_end）"
+        fi
+    else
+        if [ -f "$WIFI_OFF_FLAG" ]; then
+            uci set wireless.radio0.disabled=0
+            uci set wireless.radio1.disabled=0
+            uci commit wireless
+            wifi reload
+            rm -f "$WIFI_OFF_FLAG"
+            log "WiFi 定时开启（关闭时段 $wifi_off_start-$wifi_off_end 外）"
+        fi
+    fi
+}
+
 # 状态文件读写
 last_login_ts=0
 load_state() {
@@ -338,6 +389,9 @@ log "进程已启动 pid:$$ [加密: ${CRYPTO:-无}]"
 # 主循环
 last_online=-1
 while true; do
+    # WiFi 定时关闭检查
+    check_wifi
+
     # 定时退出检查（即使静默时段也执行，到点就踢）
     check_logout
 

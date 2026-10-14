@@ -63,6 +63,12 @@ quiet_end.placeholder = "HH:MM"
 logout_time = s:option(Value, "logout_time", translate("定时退出"), translate("每天到此时间自动注销账号（踢出登录），当天不再重新登录，留空=不启用。格式 HH:MM"))
 logout_time.placeholder = "HH:MM"
 
+-- WiFi 定时关闭
+wifi_off_start = s:option(Value, "wifi_off_start", translate("WiFi关闭开始"), translate("在此时间段内关闭 WiFi（2.4G+5G），留空=不启用。格式 HH:MM，如 23:00"))
+wifi_off_start.placeholder = "HH:MM"
+wifi_off_end = s:option(Value, "wifi_off_end", translate("WiFi关闭结束"), translate("WiFi 关闭时段结束时间，支持跨午夜（如开始 23:00 结束 06:00）"))
+wifi_off_end.placeholder = "HH:MM"
+
 -- 退避机制
 o1 = s:option(Value, "backoff_max", translate("退避阈值"), translate("连续失败几次后进入退避模式，0=永不退避"))
 o1.default = 5

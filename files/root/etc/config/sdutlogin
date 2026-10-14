@@ -6,6 +6,8 @@ config login
 	option quiet_start ''
 	option quiet_end ''
 	option logout_time ''
+	option wifi_off_start ''
+	option wifi_off_end ''
 	option backoff_max '5'
 	option backoff_secs '1800'
 	option backoff_stop '0'
